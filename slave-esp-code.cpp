@@ -1,91 +1,55 @@
+//ESP32 Slave 
 #include <WiFi.h>
 #include <esp_now.h>
+#include <esp_wifi.h>
 
-// ==========================================
-// ESP-NOW & MOTOR CONFIGURATION
-// ==========================================
-typedef struct {
-  int8_t speed;   
-  uint8_t enable; 
-} Cmd;
+#define LED_PIN 2
+#define WIFI_CHANNEL 1
 
-Cmd cmd;
-volatile uint32_t lastRx = 0;
+void OnDataRecv(const esp_now_recv_info_t *info,
+                const uint8_t *incomingData,
+                int len) {
 
-// BTS7960 Motor Driver Pins (Change to match your wiring)
-// NOTE: If the slave motors spin the wrong way because it is 
-// physically mirrored, swap the RPWM and LPWM pin numbers here!
-const int RPWM = 25;
-const int LPWM = 26;
-const int R_EN = 27;
-const int L_EN = 14;
+  if (len != sizeof(uint8_t)) return;
 
-void setupMotors() {
-  pinMode(RPWM, OUTPUT);
-  pinMode(LPWM, OUTPUT);
-  pinMode(R_EN, OUTPUT);
-  pinMode(L_EN, OUTPUT);
-  digitalWrite(R_EN, HIGH);
-  digitalWrite(L_EN, HIGH);
-}
+  uint8_t receivedState;
 
-void driveMotors(int8_t speed, uint8_t enable) {
-  if (!enable || speed == 0) {
-    analogWrite(RPWM, 0);
-    analogWrite(LPWM, 0);
-    return;
-  }
+  memcpy(&receivedState, incomingData, sizeof(receivedState));
 
-  int pwmVal = map(abs(speed), 0, 100, 0, 255);
+  digitalWrite(LED_PIN, receivedState ? HIGH : LOW);
 
-  if (speed > 0) { 
-    analogWrite(RPWM, pwmVal);
-    analogWrite(LPWM, 0);
-  } else {         
-    analogWrite(RPWM, 0);
-    analogWrite(LPWM, pwmVal);
-  }
-}
-
-// Callback for receiving ESP-NOW data (ESP32 Core 3.x signature)
-// If using older ESP32 core 2.x, change signature to: 
-// void onRecv(const uint8_t* mac, const uint8_t* data, int len)
-void onRecv(const esp_now_recv_info_t *info, const uint8_t *data, int len) {
-  if (len == sizeof(cmd)) {
-    memcpy(&cmd, data, sizeof(cmd));
-    lastRx = millis(); // Reset failsafe timer
-  }
+  Serial.print("Received command: ");
+  Serial.println(receivedState ? "ON" : "OFF");
 }
 
 void setup() {
+
   Serial.begin(115200);
-  
-  // Print MAC Address so you can copy it to the Master code
-  Serial.print("Slave MAC Address: ");
+
+  pinMode(LED_PIN, OUTPUT);
+  digitalWrite(LED_PIN, LOW);
+
+  // Initialize Wi-Fi
+  WiFi.mode(WIFI_STA);
+
+  // Set ESP-NOW channel
+  esp_wifi_set_channel(WIFI_CHANNEL, WIFI_SECOND_CHAN_NONE);
+
+  Serial.print("ESP32 #2 MAC: ");
   Serial.println(WiFi.macAddress());
 
-  setupMotors();
-  
-  WiFi.mode(WIFI_STA);
-  
+  // Initialize ESP-NOW
   if (esp_now_init() != ESP_OK) {
-    Serial.println("Error initializing ESP-NOW");
+    Serial.println("ESP-NOW initialization failed!");
     return;
   }
-  
+
   // Register receive callback
-  esp_now_register_recv_cb(onRecv);
+  esp_now_register_recv_cb(OnDataRecv);
+
+  Serial.println("ESP32 #2 Ready!");
 }
 
 void loop() {
-  // Failsafe: If no data received for 300ms, force stop
-  if (millis() - lastRx > 300) {
-    cmd.speed = 0;
-    cmd.enable = 0;
-  }
-  
-  // Drive Slave's motors continuously 
-  driveMotors(cmd.speed, cmd.enable);
-  
-  delay(10);
+
 }
