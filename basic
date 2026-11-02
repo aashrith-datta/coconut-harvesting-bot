@@ -1,0 +1,30 @@
+#define RPWM 18
+#define LPWM 19
+#define R_EN 21
+#define L_EN 22
+
+const int SPEED = 200;  // 0-255
+
+void setup() {
+  Serial.begin(115200);
+  pinMode(R_EN, OUTPUT);
+  pinMode(L_EN, OUTPUT);
+  digitalWrite(R_EN, HIGH);
+  digitalWrite(L_EN, HIGH);
+
+  ledcAttach(RPWM, 20000, 8);  // pin, freq, 8-bit resolution
+  ledcAttach(LPWM, 20000, 8);
+}
+
+//void up()   { ledcWrite(LPWM, 0); ledcWrite(RPWM, SPEED); }
+void down() { ledcWrite(RPWM, 0); ledcWrite(LPWM, SPEED); }
+void stopMotor() { ledcWrite(RPWM, 0); ledcWrite(LPWM, 0); }
+char c = 's';
+void loop() {
+  if (Serial.available()) {
+     c = Serial.read();
+    //if (c == 'u') up();
+    if (c == 'd') down();
+    else if (c == 's') stopMotor();
+  }
+}
